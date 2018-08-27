@@ -1,0 +1,116 @@
+#!/bin/sh
+#
+# tinyproxy     Startup script for the tinyproxy server
+#
+# chkconfig:   - 85 15
+# description: small, efficient HTTP/SSL proxy daemon
+#
+# processname: tinyproxy
+# config:      /etc/tinyproxy/tinyproxy.conf
+# config:      /etc/sysconfig/tinyproxy
+# pidfile:     /var/run/tinyproxy.pid
+#
+# Note: pidfile is created by tinyproxy in its config
+# see PidFile in the configuration file.
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+.  /etc/sysconfig/network
+
+# Check that networking is up.
+[ "$NETWORKING" = "no" ] && exit 0
+
+exec="/usr/sbin/tinyproxy"
+prog=$(basename $exec)
+[ "service" = "$0" ] && { inst=$1; shift; } || inst=${0##*/}
+
+config="/etc/tinyproxy/$inst.conf"
+lockfile=/var/lock/subsys/$inst
+pidfile=/var/run/$prog/$inst.pid
+
+[ -r "/etc/sysconfig/$prog" ] && . /etc/sysconfig/$prog
+[ -r "/etc/sysconfig/$inst" ] && . /etc/sysconfig/$inst
+
+: ${CONFIG:=$config}
+: ${LOCKFILE:=$lockfile}
+: ${PIDFILE:=$pidfile}
+
+#TODO define/lookup values of exitcodes and put in /etc/init.d/functions
+start() {
+    [ -x $exec ] || exit 5
+    [ -f "$CONFIG" ] || exit 6
+    echo -n $"Starting $inst: "
+    daemon $exec -c "$CONFIG"
+    retval=$?
+    # TODO pick up $$ for PID value since tinyproxy will stop writing PID file
+    echo
+    [ $retval -eq 0 ] && touch "$LOCKFILE"
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $inst: "
+    killproc -p "$PIDFILE" $exec
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f "$LOCKFILE"
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    echo -n $"Reloading $inst: "
+    killproc -p "$PIDFILE" $exec -HUP
+    echo
+}
+
+force_reload() {
+    restart
+}
+
+rh_status() {
+    status -p "$PIDFILE" -l "$LOCKFILE" $exec
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?
+
